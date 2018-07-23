@@ -97,15 +97,18 @@
 
             try
             {
+                // Post data
                 if (!string.IsNullOrEmpty(payload))
                 {
-                    var postBytes = Encoding.UTF8.GetBytes(payload);
+                    var dataBytes = Encoding.UTF8.GetBytes(payload);
+                    request.ContentLength = dataBytes.Length;
                     using (var requestStream = request.GetRequestStream())
                     {
-                        requestStream.Write(postBytes, 0, postBytes.Length);
+                        requestStream.Write(dataBytes, 0, dataBytes.Length);
                     }
                 }
 
+                // Request
                 using (var response = (HttpWebResponse)request.GetResponse())
                 {
                     using (var dataStream = response.GetResponseStream())
@@ -121,6 +124,7 @@
             }
             catch (WebException ex)
             {
+                // get web error
                 var webResponse = ex.Response as HttpWebResponse;
                 statusCode = webResponse.StatusCode;
                 using (var stream = ex.Response.GetResponseStream())
@@ -133,6 +137,7 @@
             }
             catch (Exception ex)
             {
+                // rethrow
                 throw ex;
             }
 

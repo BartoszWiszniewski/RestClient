@@ -77,6 +77,35 @@
             return request;
         }
 
+        private Response<string> GetResponse(string content, bool succeeded, HttpStatusCode httpStatusCode)
+        {
+            return new Response<string>
+            {
+                Content = succeeded ? content : null,
+                Success = succeeded,
+                ErrorMessage = succeeded ? null : content,
+                StatusCode = httpStatusCode
+            };
+        }
+
+        private Response<string> GetResponseOnException(WebException webException)
+        {
+            var content = string.Empty;
+            var statusCode = HttpStatusCode.OK;
+
+            var webResponse = webException.Response as HttpWebResponse;
+            statusCode = webResponse.StatusCode;
+            using (var stream = webException.Response.GetResponseStream())
+            {
+                using (var reader = new StreamReader(stream))
+                {
+                    content = reader.ReadToEnd();
+                }
+            }
+
+            return this.GetResponse(content, false, statusCode);
+        }
+
         private Response<T> MapResponse<T>(Response<string> response)
         {
             var content = JsonConvert.DeserializeObject<T>(response.Content);
@@ -89,65 +118,54 @@
             };
         }
 
-        private Response<string> Request(HttpWebRequest request, string payload = null)
+        private void PostData(HttpWebRequest request, string payload = null)
         {
-            var content = string.Empty;
-            var succeeded = false;
-            var statusCode = HttpStatusCode.OK;
-
-            try
+            if (!string.IsNullOrEmpty(payload))
             {
-                // Post data
-                if (!string.IsNullOrEmpty(payload))
+                var dataBytes = Encoding.UTF8.GetBytes(payload);
+                request.ContentLength = dataBytes.Length;
+                using (var requestStream = request.GetRequestStream())
                 {
-                    var dataBytes = Encoding.UTF8.GetBytes(payload);
-                    request.ContentLength = dataBytes.Length;
-                    using (var requestStream = request.GetRequestStream())
-                    {
-                        requestStream.Write(dataBytes, 0, dataBytes.Length);
-                    }
-                }
-
-                // Request
-                using (var response = (HttpWebResponse)request.GetResponse())
-                {
-                    using (var dataStream = response.GetResponseStream())
-                    {
-                        using (var reader = new StreamReader(dataStream))
-                        {
-                            content = reader.ReadToEnd();
-                            statusCode = response.StatusCode;
-                            succeeded = true;
-                        }
-                    }
+                    requestStream.Write(dataBytes, 0, dataBytes.Length);
                 }
             }
-            catch (WebException ex)
+        }
+
+        private Response<string> Request(HttpWebRequest request, string payload = null)
+        {
+            try
             {
-                // get web error
-                var webResponse = ex.Response as HttpWebResponse;
-                statusCode = webResponse.StatusCode;
-                using (var stream = ex.Response.GetResponseStream())
-                {
-                    using (var reader = new StreamReader(stream))
-                    {
-                        content = reader.ReadToEnd();
-                    }
-                }
+                this.PostData(request, payload);
+                return this.SendRequest(request);
+            }
+            catch (WebException webException)
+            {
+                return this.GetResponseOnException(webException);
             }
             catch (Exception ex)
             {
-                // rethrow
                 throw ex;
             }
+        }
 
-            return new Response<string>
+        private Response<string> SendRequest(HttpWebRequest request)
+        {
+            var content = string.Empty;
+            var statusCode = HttpStatusCode.OK;
+
+            using (var response = (HttpWebResponse)request.GetResponse())
             {
-                Content = succeeded ? content : null,
-                Success = succeeded,
-                ErrorMessage = succeeded ? null : content,
-                StatusCode = statusCode
-            };
+                using (var dataStream = response.GetResponseStream())
+                {
+                    using (var reader = new StreamReader(dataStream))
+                    {
+                        content = reader.ReadToEnd();
+                        statusCode = response.StatusCode;
+                    }
+                }
+            }
+
+            return this.GetResponse(content, true, statusCode);
         }
     }
 }
